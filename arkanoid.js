@@ -1,12 +1,25 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// Canvas grootte aanpassen aan het scherm
-canvas.width = window.innerWidth > 600 ? 600 : window.innerWidth - 20;
-canvas.height = window.innerHeight > 400 ? 400 : window.innerHeight - 20;
+// Responsieve canvas grootte (langwerpiger scherm)
+function resizeCanvas() {
+  const aspectRatio = 16 / 9; // Langwerpige verhouding
+  const maxWidth = window.innerWidth > 800 ? 800 : window.innerWidth - 20;
+  const maxHeight = window.innerHeight > 450 ? 450 : window.innerHeight - 20;
+
+  if (maxWidth / maxHeight > aspectRatio) {
+    canvas.width = maxHeight * aspectRatio;
+    canvas.height = maxHeight;
+  } else {
+    canvas.width = maxWidth;
+    canvas.height = maxWidth / aspectRatio;
+  }
+}
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
 
 // Variabelen voor het spel
-const paddleWidth = 100;
+const paddleWidth = canvas.width / 6; // Platform breedte relatief aan canvas
 const paddleHeight = 15;
 const ballRadius = 10;
 let paddleX = (canvas.width - paddleWidth) / 2;
@@ -15,75 +28,76 @@ let ballY = canvas.height - 30;
 let ballSpeedX = 4;
 let ballSpeedY = -4;
 let isGameOver = false;
+let isGameStarted = false;
 
-// Add these constants at the top with your other constants
-let currentLevel = 1;
-const maxLevels = 3;
+// Scoresysteem en levelweergave
+let score = 0;
+let currentLevel = 0;
 
-// Add this levels configuration
-const levelConfigs = [
-  // Level 1
+// Levels en blokjes instellen
+const levels = [
+  {
+    rows: 2,
+    cols: 5,
+    color: "#FF6F61",
+    speedMultiplier: 0.8, // Makkelijker: langzamere bal
+    pointsPerBrick: 10,
+  },
   {
     rows: 3,
-    columns: 6,
-    color: "#0095DD",
-    brickPattern: [
-      [1, 1, 1, 1, 1, 1],
-      [1, 1, 1, 1, 1, 1],
-      [1, 1, 1, 1, 1, 1],
-    ],
+    cols: 6,
+    color: "#FFA07A",
+    speedMultiplier: 1.0, // Gemiddeld
+    pointsPerBrick: 15,
   },
-  // Level 2
   {
     rows: 4,
-    columns: 7,
-    color: "#DD9500",
-    brickPattern: [
-      [1, 1, 1, 0, 1, 1, 1],
-      [1, 1, 1, 1, 1, 1, 1],
-      [1, 1, 1, 1, 1, 1, 1],
-      [1, 1, 1, 0, 1, 1, 1],
-    ],
+    cols: 7,
+    color: "#6B5B95",
+    speedMultiplier: 1.2, // Normaal
+    pointsPerBrick: 20,
   },
-  // Level 3
   {
     rows: 5,
-    columns: 8,
-    color: "#DD0095",
-    brickPattern: [
-      [1, 1, 1, 1, 1, 1, 1, 1],
-      [1, 0, 1, 1, 1, 1, 0, 1],
-      [1, 1, 1, 1, 1, 1, 1, 1],
-      [1, 0, 1, 1, 1, 1, 0, 1],
-      [1, 1, 1, 1, 1, 1, 1, 1],
-    ],
+    cols: 8,
+    color: "#88B04B",
+    speedMultiplier: 1.4, // Moeilijker
+    pointsPerBrick: 25,
+  },
+  {
+    rows: 6,
+    cols: 9,
+    color: "#FFD700",
+    speedMultiplier: 1.6, // Uitdagend
+    pointsPerBrick: 30,
   },
 ];
 
-// Touch en keyboard input
-let rightPressed = false;
-let leftPressed = false;
+let bricks = [];
+let brickWidth, brickHeight, brickPadding, brickOffsetTop, brickOffsetLeft;
 
-// Blokjes instellen
-const brickRowCount = 5;
-const brickColumnCount = 8;
-const brickWidth = 75;
-const brickHeight = 20;
-const brickPadding = 10;
-const brickOffsetTop = 30;
-const brickOffsetLeft = 35;
+function createBricks(level) {
+  const { rows, cols } = levels[level];
+  brickWidth = (canvas.width - 20) / cols - 10;
+  brickHeight = 20;
+  brickPadding = 10;
+  brickOffsetTop = 30;
+  brickOffsetLeft = (canvas.width - cols * (brickWidth + brickPadding)) / 2;
 
-const bricks = [];
-for (let c = 0; c < brickColumnCount; c++) {
-  bricks[c] = [];
-  for (let r = 0; r < brickRowCount; r++) {
-    bricks[c][r] = { x: 0, y: 0, status: 1 }; // status 1 = zichtbaar, 0 = kapot
+  bricks = [];
+  for (let c = 0; c < cols; c++) {
+    bricks[c] = [];
+    for (let r = 0; r < rows; r++) {
+      bricks[c][r] = { x: 0, y: 0, status: 1 }; // status 1 = zichtbaar, 0 = kapot
+    }
   }
 }
 
+createBricks(currentLevel);
+
 // Platform tekenen
 function drawPaddle() {
-  ctx.fillStyle = "#0095DD";
+  ctx.fillStyle = "#FFD700";
   ctx.fillRect(
     paddleX,
     canvas.height - paddleHeight,
@@ -96,22 +110,21 @@ function drawPaddle() {
 function drawBall() {
   ctx.beginPath();
   ctx.arc(ballX, ballY, ballRadius, 0, Math.PI * 2);
-  ctx.fillStyle = "#0095DD";
+  ctx.fillStyle = "#FFD700";
   ctx.fill();
   ctx.closePath();
 }
 
-// Modify your drawBricks function
+// Blokjes tekenen
 function drawBricks() {
-  const level = levelConfigs[currentLevel - 1];
-  for (let c = 0; c < level.columns; c++) {
-    for (let r = 0; r < level.rows; r++) {
+  for (let c = 0; c < bricks.length; c++) {
+    for (let r = 0; r < bricks[c].length; r++) {
       if (bricks[c][r].status === 1) {
         const brickX = c * (brickWidth + brickPadding) + brickOffsetLeft;
         const brickY = r * (brickHeight + brickPadding) + brickOffsetTop;
         bricks[c][r].x = brickX;
         bricks[c][r].y = brickY;
-        ctx.fillStyle = level.color;
+        ctx.fillStyle = levels[currentLevel].color;
         ctx.fillRect(brickX, brickY, brickWidth, brickHeight);
       }
     }
@@ -120,8 +133,8 @@ function drawBricks() {
 
 // Beweging van de bal
 function moveBall() {
-  ballX += ballSpeedX;
-  ballY += ballSpeedY;
+  ballX += ballSpeedX * levels[currentLevel].speedMultiplier;
+  ballY += ballSpeedY * levels[currentLevel].speedMultiplier;
 
   // Botsing met linker- en rechterrand
   if (ballX + ballRadius > canvas.width || ballX - ballRadius < 0) {
@@ -148,19 +161,7 @@ function moveBall() {
   }
 }
 
-// Add this function to check if level is completed
-function isLevelComplete() {
-  for (let c = 0; c < bricks.length; c++) {
-    for (let r = 0; r < bricks[c].length; r++) {
-      if (bricks[c][r].status === 1) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-// Modify your collisionDetection function to include level progression
+// Botsing detectie met blokjes
 function collisionDetection() {
   for (let c = 0; c < bricks.length; c++) {
     for (let r = 0; r < bricks[c].length; r++) {
@@ -175,18 +176,12 @@ function collisionDetection() {
           ballSpeedY = -ballSpeedY;
           brick.status = 0;
 
+          // Score verhogen
+          score += levels[currentLevel].pointsPerBrick;
+
+          // Controleer of alle blokjes zijn vernietigd
           if (isLevelComplete()) {
-            if (currentLevel < maxLevels) {
-              currentLevel++;
-              bricks.length = 0;
-              Object.assign(bricks, initializeBricks());
-              ballX = canvas.width / 2;
-              ballY = canvas.height - 30;
-              paddleX = (canvas.width - paddleWidth) / 2;
-            } else {
-              alert("Congratulations! You've completed all levels!");
-              document.location.reload();
-            }
+            nextLevel();
           }
         }
       }
@@ -194,7 +189,42 @@ function collisionDetection() {
   }
 }
 
+// Controleer of alle blokjes zijn vernietigd
+function isLevelComplete() {
+  for (let c = 0; c < bricks.length; c++) {
+    for (let r = 0; r < bricks[c].length; r++) {
+      if (bricks[c][r].status === 1) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+// Ga naar het volgende level
+function nextLevel() {
+  currentLevel++;
+  if (currentLevel >= levels.length) {
+    showGameOverModal("Gefeliciteerd! Je hebt alle levels voltooid!");
+    return;
+  }
+  createBricks(currentLevel);
+  resetBallAndPaddle();
+}
+
+// Reset bal en platform voor een nieuw level
+function resetBallAndPaddle() {
+  ballX = canvas.width / 2;
+  ballY = canvas.height - 30;
+  ballSpeedX = 4;
+  ballSpeedY = -4;
+  paddleX = (canvas.width - paddleWidth) / 2;
+}
+
 // Keyboard input afhandelen
+let rightPressed = false;
+let leftPressed = false;
+
 document.addEventListener("keydown", keyDownHandler);
 document.addEventListener("keyup", keyUpHandler);
 
@@ -233,11 +263,67 @@ function touchMoveHandler(e) {
     paddleX = canvas.width - paddleWidth;
 }
 
+// Modals
+function showModal(message, buttonText, callback) {
+  const modal = document.createElement("div");
+  modal.style.position = "fixed";
+  modal.style.top = "0";
+  modal.style.left = "0";
+  modal.style.width = "100%";
+  modal.style.height = "100%";
+  modal.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+  modal.style.color = "#fff";
+  modal.style.display = "flex";
+  modal.style.justifyContent = "center";
+  modal.style.alignItems = "center";
+  modal.style.zIndex = "1000";
+  modal.innerHTML = `
+        <div style="text-align: center; background: rgba(0, 0, 0, 0.9); padding: 20px; border-radius: 10px;">
+            <h2>${message}</h2>
+            <button id="modalButton" style="padding: 10px 20px; background: #FFD700; border: none; border-radius: 5px; cursor: pointer;">${buttonText}</button>
+        </div>
+    `;
+  document.body.appendChild(modal);
+
+  document.getElementById("modalButton").addEventListener("click", () => {
+    modal.remove();
+    if (callback) callback();
+  });
+}
+
+function showStartModal() {
+  showModal(
+    'Welkom bij Arkanoid!<br>Klik op "Start" om te beginnen.',
+    "Start",
+    () => {
+      isGameStarted = true;
+    }
+  );
+}
+
+function showGameOverModal(message) {
+  showModal(message, "Opnieuw Spelen", () => {
+    document.location.reload();
+  });
+}
+
+// Tekst weergeven (score en level)
+function drawScoreAndLevel() {
+  ctx.fillStyle = "#fff";
+  ctx.font = "16px Arial";
+  ctx.fillText(`Score: ${score}`, 10, 20);
+  ctx.fillText(`Level: ${currentLevel + 1}`, canvas.width - 100, 20);
+}
+
 // Spel lus
 function update() {
+  if (!isGameStarted) {
+    requestAnimationFrame(update);
+    return;
+  }
+
   if (isGameOver) {
-    alert("Game Over!");
-    document.location.reload();
+    showGameOverModal("Game Over!");
     return;
   }
 
@@ -245,38 +331,20 @@ function update() {
   drawBricks();
   drawBall();
   drawPaddle();
+  drawScoreAndLevel();
   moveBall();
   collisionDetection();
 
-  // Platform bewegen
+  // Platform bewegen (sneller)
   if (rightPressed && paddleX < canvas.width - paddleWidth) {
-    paddleX += 7;
+    paddleX += 10;
   } else if (leftPressed && paddleX > 0) {
-    paddleX -= 7;
+    paddleX -= 10;
   }
 
   requestAnimationFrame(update);
 }
 
-// Modify the initializeBricks function
-function initializeBricks() {
-  const level = levelConfigs[currentLevel - 1];
-  const bricks = [];
-
-  for (let c = 0; c < level.columns; c++) {
-    bricks[c] = [];
-    for (let r = 0; r < level.rows; r++) {
-      bricks[c][r] = {
-        x: 0,
-        y: 0,
-        status: level.brickPattern[r][c],
-      };
-    }
-  }
-  return bricks;
-}
-
-// Initialize bricks at the start of the game
-Object.assign(bricks, initializeBricks());
-
+// Start het spel met een modal
+showStartModal();
 update();
