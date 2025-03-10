@@ -115,7 +115,7 @@ function drawBall() {
   ctx.closePath();
 }
 
-// Blokjes tekenen
+// Blokjes tekenen met moderne uitstraling
 function drawBricks() {
   for (let c = 0; c < bricks.length; c++) {
     for (let r = 0; r < bricks[c].length; r++) {
@@ -124,11 +124,63 @@ function drawBricks() {
         const brickY = r * (brickHeight + brickPadding) + brickOffsetTop;
         bricks[c][r].x = brickX;
         bricks[c][r].y = brickY;
-        ctx.fillStyle = levels[currentLevel].color;
-        ctx.fillRect(brickX, brickY, brickWidth, brickHeight);
+
+        // 3D-effect en afronding toevoegen
+        const radius = 5; // Radius voor afgeronde hoeken
+        const gradient = ctx.createLinearGradient(
+          brickX,
+          brickY,
+          brickX,
+          brickY + brickHeight
+        );
+        gradient.addColorStop(0, lightenColor(levels[currentLevel].color, 0.2)); // Lichtere kleur bovenaan
+        gradient.addColorStop(1, levels[currentLevel].color); // Donkere kleur onderaan
+
+        ctx.fillStyle = gradient;
+        ctx.strokeStyle = darkenColor(levels[currentLevel].color, 0.2); // Donkere rand voor diepte
+        ctx.lineWidth = 2;
+
+        // Afgeronde rechthoek tekenen
+        ctx.beginPath();
+        ctx.roundRect(brickX, brickY, brickWidth, brickHeight, [radius]);
+        ctx.fill();
+        ctx.stroke();
+
+        // Schaduw voor extra 3D-effect
+        ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+        ctx.shadowBlur = 5;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
       }
     }
   }
+
+  // Reset schaduwinstellingen
+  ctx.shadowColor = "transparent";
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+}
+
+// Hulpfuncties voor kleuren manipulatie
+function lightenColor(color, amount) {
+  const col = parseInt(color.slice(1), 16);
+  const r = Math.min(255, ((col >> 16) & 0xff) + amount * 255);
+  const g = Math.min(255, ((col >> 8) & 0xff) + amount * 255);
+  const b = Math.min(255, (col & 0xff) + amount * 255);
+  return `#${Math.round(r).toString(16).padStart(2, "0")}${Math.round(g)
+    .toString(16)
+    .padStart(2, "0")}${Math.round(b).toString(16).padStart(2, "0")}`;
+}
+
+function darkenColor(color, amount) {
+  const col = parseInt(color.slice(1), 16);
+  const r = Math.max(0, ((col >> 16) & 0xff) - amount * 255);
+  const g = Math.max(0, ((col >> 8) & 0xff) - amount * 255);
+  const b = Math.max(0, (col & 0xff) - amount * 255);
+  return `#${Math.round(r).toString(16).padStart(2, "0")}${Math.round(g)
+    .toString(16)
+    .padStart(2, "0")}${Math.round(b).toString(16).padStart(2, "0")}`;
 }
 
 // Beweging van de bal
